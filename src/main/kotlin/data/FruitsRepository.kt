@@ -7,11 +7,15 @@ package data
 
 class FruitsRepository(
     fruitService: FruitService
-) {
+) : FruitService {
 
     private var _service: FruitService = fruitService
 
-    fun fetchFruits(callback: Callback<List<String>>) {
+    override fun fetchFruits(callback: Callback<List<String>>) {
         _service.fetchFruits(callback)
+    }
+
+    override suspend fun fetchFruits(): List<String> {
+        return _service.fetchFruits()
     }
 }

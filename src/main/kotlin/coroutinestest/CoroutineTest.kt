@@ -1,31 +1,38 @@
 package coroutinestest
 
 import data.Callback
+import data.FruitsDataSource
 import data.FruitsRepository
-import data.LegacyDataSource
 import kotlinx.coroutines.*
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
 
 class CoroutineTest {
 
     fun exposedFunction() {
         runBlocking {
             try {
-                testLaunch()
-                println("Main Execution Completed for launch.")
-                testAsync()
-                println("Main Execution Completed for async.")
-                val repository = FruitsRepository(LegacyDataSource())
-                println("Main Execution started for fetchFruitsLegacyWay.")
-                delay(3000)
-                fetchFruitsLegacyWay(repository)
-                println("Main Execution completed for fetchFruitsLegacyWay.")
-                println("Main Execution started for fetchFruitsUsingCoroutines.")
-                delay(3000)
-                fetchFruitsUsingCoroutines(repository)
-                println("Main Execution completed for fetchFruitsUsingCoroutines.")
+                executor(::testLaunch.name, ::testLaunch)
+
+                val repository = FruitsRepository(FruitsDataSource())
+
+                executor(blockName = ::fetchFruitsLegacyWay.name, block = { (::fetchFruitsLegacyWay)(repository) })
+
+                executor(
+                    blockName = ::fetchFruitsUsingCoroutine.name,
+                    block = { fetchFruitsUsingCoroutine(repository) }
+                )
+
+                executor(
+                    blockName = ::fetchFruitsUsingCoroutineAsyncAwait.name,
+                    block = { fetchFruitsUsingCoroutineAsyncAwait(repository) }
+                )
+
+                suspendCoroutineTest(repository).let {
+                    println("suspendCoroutineTest: Response: $it")
+                }
+                suspendCancellableCoroutineTest(repository).let {
+                    println("suspendCancellableCoroutineTest: Response: $it")
+                }
+
                 CoroutineScope(Dispatchers.IO).launch {
                     val fruits = fetchFruits()
                     println("Fruits: $fruits")
@@ -33,22 +40,6 @@ class CoroutineTest {
             } catch (e: Exception) {
                 println(e.message)
             }
-        }
-    }
-
-    private suspend fun fetchFruitsUsingCoroutines(repository: FruitsRepository) {
-        suspendCoroutine { continuation ->
-            repository.fetchFruits(object : Callback<List<String>> {
-                override fun onSuccess(response: List<String>) {
-                    continuation.resume(response)
-                }
-
-                override fun onFailure(e: Throwable) {
-                    continuation.resumeWithException(e)
-                }
-            })
-        }.let {
-            println("fetchFruitsUsingCoroutines: Response: $it")
         }
     }
 
@@ -62,6 +53,26 @@ class CoroutineTest {
                 println("fetchFruitsLegacyWay: onFailure: ${e.message} ")
             }
         })
+    }
+
+    private suspend fun fetchFruitsUsingCoroutine(repository: FruitsRepository) {
+        try {
+            println("fetchFruitsUsingCoroutine success:${repository.fetchFruits()}")
+        } catch (ex: Exception) {
+            println("fetchFruitsUsingCoroutine failure:${ex.message}")
+        }
+    }
+
+    private suspend fun fetchFruitsUsingCoroutineAsyncAwait(repository: FruitsRepository) {
+        runBlocking {
+            val fruits1 = async { repository.fetchFruits() }
+            val data1 = fruits1.await()
+            println("Data1: $data1")
+
+            val fruits2 = async { repository.fetchFruits() }
+            val data2 = fruits2.await()
+            println("Data2: $data2")
+        }
     }
 
     private suspend fun testLaunch() {
@@ -116,10 +127,13 @@ class CoroutineTest {
     private suspend fun fetchFruits(): List<String> {
         delay(2000L)
         return listOf(
-            "Apple",
-            "Mango",
-            "Banana",
-            "Cherry"
+            "Apple", "Mango", "Banana", "Cherry"
         )
+    }
+
+    private suspend fun executor(blockName: String, block: suspend () -> Unit) {
+        println("Main Execution Started for $blockName.")
+        block.invoke()
+        println("Main Execution Completed for $blockName.")
     }
 }
